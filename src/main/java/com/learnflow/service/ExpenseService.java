@@ -7,7 +7,9 @@ import com.learnflow.repository.ExpenseRepository;
 import com.learnflow.dto.CreateExpenseRequest;
 import com.learnflow.dto.ExpenseResponse;
 import com.learnflow.dto.UpdateExpenseRequest;
+import com.learnflow.exception.InsufficientBalanceException;
 import com.learnflow.exception.ResourceNotFoundException;
+import org.springframework.transaction.annotation.Transactional;
 
 import org.springframework.stereotype.Service;
 
@@ -35,9 +37,14 @@ public class ExpenseService {
         this.accountRepository = accountRepository;
     }
 
+    @Transactional
     public ExpenseResponse createExpense(CreateExpenseRequest request) {
 
-         Account account = accountRepository.findById(request.getAccountId()).orElseThrow(() -> new ResourceNotFoundException( "Account not found with id: " + request.getAccountId()));
+        Account account = accountRepository.findById(request.getAccountId()).orElseThrow(() -> new ResourceNotFoundException( "Account not found with id: " + request.getAccountId()));
+        
+        if (account.getBalance().compareTo(request.getAmount()) < 0) {
+            throw new InsufficientBalanceException("Insufficient balance in account: " + account.getName());
+        }
 
         Expense expense = new Expense(
             request.getAmount(),
@@ -48,6 +55,10 @@ public class ExpenseService {
         );
 
         Expense savedExpense = expenseRepository.save(expense);
+
+        
+        account.setBalance(account.getBalance().subtract(request.getAmount()));
+        accountRepository.save(account);
 
         return new ExpenseResponse(
             savedExpense.getId(),
